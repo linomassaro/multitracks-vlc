@@ -120,7 +120,6 @@ class MultitracksVLC(QMainWindow):
         Open a file dialog to select a video file and populate audio tracks.
         """
         options = QFileDialog.Options()
-        options |= QFileDialog.DontUseNativeDialog
         self.video_file, _ = QFileDialog.getOpenFileName(self, "Select Video File", "",
                                                          "Video Files (*.mp4 *.mkv *.avi *.mov);;All Files (*)",
                                                          options=options)

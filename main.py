@@ -4,8 +4,9 @@ import socket
 import time
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QComboBox,
-                             QVBoxLayout, QWidget, QFileDialog, QMessageBox, QSlider, QHBoxLayout)
-from PyQt5.QtCore import Qt, QTimer
+                             QVBoxLayout, QWidget, QFileDialog, QMessageBox, QSlider, QHBoxLayout,
+                             QAction, QToolBar, QDialog, QLineEdit, QGridLayout, QFrame)
+from PyQt5.QtCore import Qt, QTimer, QSettings
 from PyQt5.QtGui import QIcon
 from pymediainfo import MediaInfo
 import ctypes
@@ -20,6 +21,7 @@ class MultitracksVLC(QMainWindow):
         self.video_file = None
         self.audio_tracks = []
         self.video_duration = 0
+        self.vlc_path = r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
         self.initUI()
 
     def initUI(self):
@@ -27,7 +29,7 @@ class MultitracksVLC(QMainWindow):
         Set up the user interface.
         """
         self.setWindowTitle("Multitracks VLC")
-        self.setGeometry(100, 100, 600, 400)
+        self.setGeometry(100, 100, 800, 400)
         self.setWindowIcon(QIcon('icon.ico'))
 
         self.central_widget = QWidget()
@@ -37,34 +39,46 @@ class MultitracksVLC(QMainWindow):
         self.central_widget.setLayout(self.layout)
 
         self.video_label = QLabel("No video selected")
+        self.video_label.setAlignment(Qt.AlignCenter) 
         self.layout.addWidget(self.video_label)
 
         self.select_video_btn = QPushButton("Select Video")
         self.select_video_btn.clicked.connect(self.select_video)
         self.layout.addWidget(self.select_video_btn)
 
-        self.audio_track1_label = QLabel("Select Audio Track 1:")
-        self.layout.addWidget(self.audio_track1_label)
-        self.audio_dropdown1 = QComboBox()
-        self.layout.addWidget(self.audio_dropdown1)
+        self.layout.addWidget(self.create_separation_line())
 
-        self.audio_track2_label = QLabel("Select Audio Track 2:")
-        self.layout.addWidget(self.audio_track2_label)
-        self.audio_dropdown2 = QComboBox()
-        self.layout.addWidget(self.audio_dropdown2)
+        audio_layout1 = QVBoxLayout()
+        self.audio_track1_label = QLabel("Select Audio Track 1:")
+        audio_layout1.addWidget(self.audio_track1_label)
+        self.audio_dropdown1 = QComboBox()
+        audio_layout1.addWidget(self.audio_dropdown1)
 
         self.audio_device1_label = QLabel("Select Audio Device 1:")
-        self.layout.addWidget(self.audio_device1_label)
+        audio_layout1.addWidget(self.audio_device1_label)
         self.audio_devices = self.get_audio_devices()
         self.audio_device_dropdown1 = QComboBox()
         self.audio_device_dropdown1.addItems([dev_name for dev_id, dev_name in self.audio_devices])
-        self.layout.addWidget(self.audio_device_dropdown1)
+        audio_layout1.addWidget(self.audio_device_dropdown1)
+
+        audio_layout2 = QVBoxLayout()
+        self.audio_track2_label = QLabel("Select Audio Track 2:")
+        audio_layout2.addWidget(self.audio_track2_label)
+        self.audio_dropdown2 = QComboBox()
+        audio_layout2.addWidget(self.audio_dropdown2)
 
         self.audio_device2_label = QLabel("Select Audio Device 2:")
-        self.layout.addWidget(self.audio_device2_label)
+        audio_layout2.addWidget(self.audio_device2_label)
         self.audio_device_dropdown2 = QComboBox()
         self.audio_device_dropdown2.addItems([dev_name for dev_id, dev_name in self.audio_devices])
-        self.layout.addWidget(self.audio_device_dropdown2)
+        audio_layout2.addWidget(self.audio_device_dropdown2)
+
+        audio_selection_layout = QHBoxLayout()
+        audio_selection_layout.addLayout(audio_layout1)
+        audio_selection_layout.addLayout(audio_layout2)
+        self.layout.addLayout(audio_selection_layout)
+
+        self.layout.addWidget(self.create_separation_line())
 
         self.start_video_btn = QPushButton("Start Video")
         self.start_video_btn.clicked.connect(self.start_video)
@@ -86,34 +100,58 @@ class MultitracksVLC(QMainWindow):
         self.layout.addWidget(self.time_label)
         self.time_label.hide()
 
+        volume_layout = QHBoxLayout()
         self.volume_label1 = QLabel("Volume Track 1:")
-        self.layout.addWidget(self.volume_label1)
-        self.volume_label1.hide()
-
+        volume_layout.addWidget(self.volume_label1)
         self.volume_slider1 = QSlider(Qt.Horizontal)
         self.volume_slider1.setMinimum(0)
         self.volume_slider1.setMaximum(100)
         self.volume_slider1.setValue(100)
         self.volume_slider1.valueChanged.connect(self.update_volume1)
-        self.layout.addWidget(self.volume_slider1)
+        volume_layout.addWidget(self.volume_slider1)
+        self.volume_label1.hide()
         self.volume_slider1.hide()
 
         self.volume_label2 = QLabel("Volume Track 2:")
-        self.layout.addWidget(self.volume_label2)
-        self.volume_label2.hide()
-
+        volume_layout.addWidget(self.volume_label2)
         self.volume_slider2 = QSlider(Qt.Horizontal)
         self.volume_slider2.setMinimum(0)
         self.volume_slider2.setMaximum(100)
         self.volume_slider2.setValue(100)
         self.volume_slider2.valueChanged.connect(self.update_volume2)
-        self.layout.addWidget(self.volume_slider2)
+        volume_layout.addWidget(self.volume_slider2)
+        self.volume_label2.hide()
         self.volume_slider2.hide()
+
+        self.layout.addLayout(volume_layout)
+
+        self.layout.addWidget(self.create_separation_line())
 
         self.quit_btn = QPushButton("Quit")
         self.quit_btn.setStyleSheet("background-color: red; color: white;")
         self.quit_btn.clicked.connect(self.quit_app)
         self.layout.addWidget(self.quit_btn)
+
+        self.toolbar = QToolBar("Main Toolbar")
+        self.addToolBar(self.toolbar)
+
+        settings_action = QAction("Settings", self)
+        settings_action.triggered.connect(self.open_settings)
+        self.toolbar.addAction(settings_action)
+
+    def create_separation_line(self):
+        line = QFrame()
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        return line
+
+    def open_settings(self):
+        """
+        Open the settings dialog to change the VLC path.
+        """
+        settings_dialog = SettingsDialog(self.vlc_path, self)
+        if settings_dialog.exec_() == QDialog.Accepted:
+            self.vlc_path = settings_dialog.get_vlc_path()
 
     def select_video(self):
         """
@@ -228,10 +266,10 @@ class MultitracksVLC(QMainWindow):
         self.select_video_btn.hide()
         self.audio_track1_label.hide()
         self.audio_dropdown1.hide()
-        self.audio_track2_label.hide()
-        self.audio_dropdown2.hide()
         self.audio_device1_label.hide()
         self.audio_device_dropdown1.hide()
+        self.audio_track2_label.hide()
+        self.audio_dropdown2.hide()
         self.audio_device2_label.hide()
         self.audio_device_dropdown2.hide()
         self.start_video_btn.hide()
@@ -306,7 +344,7 @@ class MultitracksVLC(QMainWindow):
         """
         video_file = os.path.abspath(video_file)
         vlc_cmd1 = [
-            r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
+            self.vlc_path,
             video_file,
             f"--audio-track={audio_track1}",
             f"--aout=directx",
@@ -318,7 +356,7 @@ class MultitracksVLC(QMainWindow):
             "--fullscreen"
         ]
         vlc_cmd2 = [
-            r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe",
+            self.vlc_path,
             video_file,
             f"--audio-track={audio_track2}",
             f"--aout=directx",
@@ -377,13 +415,13 @@ class MultitracksVLC(QMainWindow):
 
     def format_time(self, seconds):
         """
-        Convert seconds to hh:mm:ss format.
+        Convert seconds to hh\:mm\:ss format.
 
         Args:
             seconds (int): Time in seconds.
 
         Returns:
-            str: Time in hh:mm:ss format.
+            str: Time in hh\:mm\:ss format.
         """
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
@@ -419,6 +457,45 @@ class MultitracksVLC(QMainWindow):
             self.audio_dropdown2.addItem(icon, language_name)
         self.audio_dropdown1.setCurrentIndex(0)
         self.audio_dropdown2.setCurrentIndex(1 if len(self.audio_tracks) > 1 else 0)
+
+class SettingsDialog(QDialog):
+    def __init__(self, vlc_path, parent=None):
+        super().__init__(parent)
+        self.vlc_path = vlc_path
+        self.initUI()
+
+    def initUI(self):
+        self.setWindowTitle("Settings")
+        self.setGeometry(100, 100, 400, 200)
+
+        layout = QVBoxLayout()
+
+        self.vlc_path_label = QLabel("VLC Path:")
+        layout.addWidget(self.vlc_path_label)
+
+        self.vlc_path_input = QLineEdit(self.vlc_path)
+        layout.addWidget(self.vlc_path_input)
+
+        self.browse_btn = QPushButton("Browse")
+        self.browse_btn.clicked.connect(self.browse_vlc)
+        layout.addWidget(self.browse_btn)
+
+        self.save_btn = QPushButton("Save")
+        self.save_btn.clicked.connect(self.accept)
+        layout.addWidget(self.save_btn)
+
+        self.setLayout(layout)
+
+    def browse_vlc(self):
+        options = QFileDialog.Options()
+        vlc_path, _ = QFileDialog.getOpenFileName(self, "Select VLC Executable", "",
+                                                  "Executable Files (*.exe);;All Files (*)",
+                                                  options=options)
+        if vlc_path:
+            self.vlc_path_input.setText(vlc_path)
+
+    def get_vlc_path(self):
+        return self.vlc_path_input.text()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

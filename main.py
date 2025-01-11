@@ -39,7 +39,7 @@ class MultitracksVLC(QMainWindow):
         self.central_widget.setLayout(self.layout)
 
         self.video_label = QLabel("No video selected")
-        self.video_label.setAlignment(Qt.AlignCenter) 
+        self.video_label.setAlignment(Qt.AlignCenter)
         self.layout.addWidget(self.video_label)
 
         self.select_video_btn = QPushButton("Select Video")
@@ -61,6 +61,18 @@ class MultitracksVLC(QMainWindow):
         self.audio_device_dropdown1.addItems([dev_name for dev_id, dev_name in self.audio_devices])
         audio_layout1.addWidget(self.audio_device_dropdown1)
 
+        volume_layout1 = QHBoxLayout()
+        self.volume_label1 = QLabel("Volume Track 1:")
+        volume_layout1.addWidget(self.volume_label1)
+        self.volume_slider1 = QSlider(Qt.Horizontal)
+        self.volume_slider1.setMinimum(0)
+        self.volume_slider1.setMaximum(100)
+        self.volume_slider1.setValue(100)
+        self.volume_slider1.valueChanged.connect(self.update_volume1)
+        volume_layout1.addWidget(self.volume_slider1)
+        self.volume_label1.hide()
+        self.volume_slider1.hide()
+
         audio_layout2 = QVBoxLayout()
         self.audio_track2_label = QLabel("Select Audio Track 2:")
         audio_layout2.addWidget(self.audio_track2_label)
@@ -73,8 +85,23 @@ class MultitracksVLC(QMainWindow):
         self.audio_device_dropdown2.addItems([dev_name for dev_id, dev_name in self.audio_devices])
         audio_layout2.addWidget(self.audio_device_dropdown2)
 
+        volume_layout2 = QHBoxLayout()
+        self.volume_label2 = QLabel("Volume Track 2:")
+        volume_layout2.addWidget(self.volume_label2)
+        self.volume_slider2 = QSlider(Qt.Horizontal)
+        self.volume_slider2.setMinimum(0)
+        self.volume_slider2.setMaximum(100)
+        self.volume_slider2.setValue(100)
+        self.volume_slider2.valueChanged.connect(self.update_volume2)
+        volume_layout2.addWidget(self.volume_slider2)
+        self.volume_label2.hide()
+        self.volume_slider2.hide()
+
         audio_selection_layout = QHBoxLayout()
+        audio_selection_layout.addLayout(volume_layout1)
         audio_selection_layout.addLayout(audio_layout1)
+        audio_selection_layout.addWidget(self.create_vertical_separation_line())
+        audio_selection_layout.addLayout(volume_layout2)
         audio_selection_layout.addLayout(audio_layout2)
         self.layout.addLayout(audio_selection_layout)
 
@@ -100,31 +127,6 @@ class MultitracksVLC(QMainWindow):
         self.layout.addWidget(self.time_label)
         self.time_label.hide()
 
-        volume_layout = QHBoxLayout()
-        self.volume_label1 = QLabel("Volume Track 1:")
-        volume_layout.addWidget(self.volume_label1)
-        self.volume_slider1 = QSlider(Qt.Horizontal)
-        self.volume_slider1.setMinimum(0)
-        self.volume_slider1.setMaximum(100)
-        self.volume_slider1.setValue(100)
-        self.volume_slider1.valueChanged.connect(self.update_volume1)
-        volume_layout.addWidget(self.volume_slider1)
-        self.volume_label1.hide()
-        self.volume_slider1.hide()
-
-        self.volume_label2 = QLabel("Volume Track 2:")
-        volume_layout.addWidget(self.volume_label2)
-        self.volume_slider2 = QSlider(Qt.Horizontal)
-        self.volume_slider2.setMinimum(0)
-        self.volume_slider2.setMaximum(100)
-        self.volume_slider2.setValue(100)
-        self.volume_slider2.valueChanged.connect(self.update_volume2)
-        volume_layout.addWidget(self.volume_slider2)
-        self.volume_label2.hide()
-        self.volume_slider2.hide()
-
-        self.layout.addLayout(volume_layout)
-
         self.layout.addWidget(self.create_separation_line())
 
         self.quit_btn = QPushButton("Quit")
@@ -139,10 +141,18 @@ class MultitracksVLC(QMainWindow):
         settings_action.triggered.connect(self.open_settings)
         self.toolbar.addAction(settings_action)
 
+    def create_vertical_separation_line(self):
+        line = QFrame()
+        line.setFrameShape(QFrame.VLine)
+        line.setFrameShadow(QFrame.Sunken)
+        line.setStyleSheet("background-color: #c5c3c2;")
+        return line
+
     def create_separation_line(self):
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
+        line.setStyleSheet("background-color: #c5c3c2;")
         return line
 
     def open_settings(self):

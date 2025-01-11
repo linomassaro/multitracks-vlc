@@ -1,0 +1,2 @@
+pymediainfo==6.1.0
+PyQt5==5.15.11

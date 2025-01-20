@@ -5,7 +5,7 @@ import time
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QComboBox,
                              QVBoxLayout, QWidget, QFileDialog, QMessageBox, QSlider, QHBoxLayout,
-                             QAction, QToolBar, QDialog, QLineEdit, QGridLayout, QFrame)
+                             QAction, QToolBar, QDialog, QLineEdit, QGridLayout, QFrame, QSpinBox)
 from PyQt5.QtCore import Qt, QTimer, QSettings
 from PyQt5.QtGui import QIcon
 from pymediainfo import MediaInfo
@@ -22,6 +22,7 @@ class MultitracksVLC(QMainWindow):
         self.audio_tracks = []
         self.video_duration = 0
         self.vlc_path = r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
+        self.num_tracks = 2
         self.initUI()
 
     def initUI(self):
@@ -48,62 +49,13 @@ class MultitracksVLC(QMainWindow):
 
         self.layout.addWidget(self.create_separation_line())
 
-        audio_layout1 = QVBoxLayout()
-        self.audio_track1_label = QLabel("Select Audio Track 1:")
-        audio_layout1.addWidget(self.audio_track1_label)
-        self.audio_dropdown1 = QComboBox()
-        audio_layout1.addWidget(self.audio_dropdown1)
+        self.audio_layouts = []
+        self.audio_dropdowns = []
+        self.audio_device_dropdowns = []
+        self.volume_sliders = []
+        self.volume_labels = []
 
-        self.audio_device1_label = QLabel("Select Audio Device 1:")
-        audio_layout1.addWidget(self.audio_device1_label)
-        self.audio_devices = self.get_audio_devices()
-        self.audio_device_dropdown1 = QComboBox()
-        self.audio_device_dropdown1.addItems([dev_name for dev_id, dev_name in self.audio_devices])
-        audio_layout1.addWidget(self.audio_device_dropdown1)
-
-        volume_layout1 = QHBoxLayout()
-        self.volume_label1 = QLabel("Volume Track 1:")
-        volume_layout1.addWidget(self.volume_label1)
-        self.volume_slider1 = QSlider(Qt.Horizontal)
-        self.volume_slider1.setMinimum(0)
-        self.volume_slider1.setMaximum(100)
-        self.volume_slider1.setValue(100)
-        self.volume_slider1.valueChanged.connect(self.update_volume1)
-        volume_layout1.addWidget(self.volume_slider1)
-        self.volume_label1.hide()
-        self.volume_slider1.hide()
-
-        audio_layout2 = QVBoxLayout()
-        self.audio_track2_label = QLabel("Select Audio Track 2:")
-        audio_layout2.addWidget(self.audio_track2_label)
-        self.audio_dropdown2 = QComboBox()
-        audio_layout2.addWidget(self.audio_dropdown2)
-
-        self.audio_device2_label = QLabel("Select Audio Device 2:")
-        audio_layout2.addWidget(self.audio_device2_label)
-        self.audio_device_dropdown2 = QComboBox()
-        self.audio_device_dropdown2.addItems([dev_name for dev_id, dev_name in self.audio_devices])
-        audio_layout2.addWidget(self.audio_device_dropdown2)
-
-        volume_layout2 = QHBoxLayout()
-        self.volume_label2 = QLabel("Volume Track 2:")
-        volume_layout2.addWidget(self.volume_label2)
-        self.volume_slider2 = QSlider(Qt.Horizontal)
-        self.volume_slider2.setMinimum(0)
-        self.volume_slider2.setMaximum(100)
-        self.volume_slider2.setValue(100)
-        self.volume_slider2.valueChanged.connect(self.update_volume2)
-        volume_layout2.addWidget(self.volume_slider2)
-        self.volume_label2.hide()
-        self.volume_slider2.hide()
-
-        audio_selection_layout = QHBoxLayout()
-        audio_selection_layout.addLayout(volume_layout1)
-        audio_selection_layout.addLayout(audio_layout1)
-        audio_selection_layout.addWidget(self.create_vertical_separation_line())
-        audio_selection_layout.addLayout(volume_layout2)
-        audio_selection_layout.addLayout(audio_layout2)
-        self.layout.addLayout(audio_selection_layout)
+        self.create_audio_layouts()
 
         self.layout.addWidget(self.create_separation_line())
 
@@ -157,11 +109,13 @@ class MultitracksVLC(QMainWindow):
 
     def open_settings(self):
         """
-        Open the settings dialog to change the VLC path.
+        Open the settings dialog to change the VLC path and number of tracks.
         """
-        settings_dialog = SettingsDialog(self.vlc_path, self)
+        settings_dialog = SettingsDialog(self.vlc_path, self.num_tracks, self)
         if settings_dialog.exec_() == QDialog.Accepted:
             self.vlc_path = settings_dialog.get_vlc_path()
+            self.num_tracks = settings_dialog.get_num_tracks()
+            self.update_audio_layouts()
 
     def select_video(self):
         """
@@ -186,26 +140,23 @@ class MultitracksVLC(QMainWindow):
         """
         Start the video with the selected audio tracks and devices.
         """
-        audio_track1 = self.audio_dropdown1.currentIndex()
-        audio_track2 = self.audio_dropdown2.currentIndex()
-        device1 = self.audio_device_dropdown1.currentText()
-        device2 = self.audio_device_dropdown2.currentText()
+        audio_tracks = [dropdown.currentIndex() for dropdown in self.audio_dropdowns]
+        devices = [dropdown.currentText() for dropdown in self.audio_device_dropdowns]
 
-        if not self.video_file or not device1 or not device2:
+        if not self.video_file or any(not device for device in devices):
             QMessageBox.critical(self, "Error", "Please select a video and audio devices.")
             return
 
-        device1_guid = next((dev_id for dev_id, dev_name in self.audio_devices if dev_name == device1), None)
-        device2_guid = next((dev_id for dev_id, dev_name in self.audio_devices if dev_name == device2), None)
+        device_guids = [next((dev_id for dev_id, dev_name in self.audio_devices if dev_name == device), None) for device in devices]
 
-        if not device1_guid or not device2_guid:
+        if any(not guid for guid in device_guids):
             QMessageBox.critical(self, "Error", "Unable to retrieve GUIDs of the audio devices.")
             return
 
         try:
-            self.start_vlc_instances(self.video_file, audio_track1, audio_track2, device1_guid, device2_guid)
-            self.send_command("localhost", 4212, "play")
-            self.send_command("localhost", 4213, "play")
+            self.start_vlc_instances(self.video_file, audio_tracks, device_guids)
+            for port in range(4212, 4212 + self.num_tracks):
+                self.send_command("localhost", port, "play")
             self.show_playback_controls()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
@@ -214,8 +165,8 @@ class MultitracksVLC(QMainWindow):
         """
         Pause the video playback.
         """
-        self.send_command("localhost", 4212, "pause")
-        self.send_command("localhost", 4213, "pause")
+        for port in range(4212, 4212 + self.num_tracks):
+            self.send_command("localhost", port, "pause")
         current_time = self.get_current_time("localhost", 4212)
         if current_time is not None:
             self.seek_bar.setValue(current_time)
@@ -229,34 +180,26 @@ class MultitracksVLC(QMainWindow):
             value (int): The new position of the seek bar.
         """
         time_position = int(value)
-        self.send_command("localhost", 4212, f"seek {time_position}")
-        self.send_command("localhost", 4213, f"seek {time_position}")
+        for port in range(4212, 4212 + self.num_tracks):
+            self.send_command("localhost", port, f"seek {time_position}")
         self.time_label.setText(self.format_time(time_position))
 
-    def update_volume1(self, value):
+    def update_volume(self, index, value):
         """
-        Update the volume of the first audio track.
+        Update the volume of the specified audio track.
 
         Args:
+            index (int): The index of the audio track.
             value (int): The new volume level.
         """
-        self.send_command("localhost", 4212, f"volume {value * 512 // 100}")
-
-    def update_volume2(self, value):
-        """
-        Update the volume of the second audio track.
-
-        Args:
-            value (int): The new volume level.
-        """
-        self.send_command("localhost", 4213, f"volume {value * 512 // 100}")
+        self.send_command("localhost", 4212 + index, f"volume {value * 512 // 100}")
 
     def quit_app(self):
         """
         Quit the application and stop VLC instances.
         """
-        self.send_command("localhost", 4212, "quit", is_quit=True)
-        self.send_command("localhost", 4213, "quit", is_quit=True)
+        for port in range(4212, 4212 + self.num_tracks):
+            self.send_command("localhost", port, "quit", is_quit=True)
         QApplication.quit()
 
     def closeEvent(self, event):
@@ -274,22 +217,77 @@ class MultitracksVLC(QMainWindow):
         Show the playback controls and hide the selection controls.
         """
         self.select_video_btn.hide()
-        self.audio_track1_label.hide()
-        self.audio_dropdown1.hide()
-        self.audio_device1_label.hide()
-        self.audio_device_dropdown1.hide()
-        self.audio_track2_label.hide()
-        self.audio_dropdown2.hide()
-        self.audio_device2_label.hide()
-        self.audio_device_dropdown2.hide()
+        for dropdown in self.audio_dropdowns:
+            dropdown.hide()
+        for dropdown in self.audio_device_dropdowns:
+            dropdown.hide()
         self.start_video_btn.hide()
         self.pause_btn.show()
         self.seek_bar.show()
         self.time_label.show()
-        self.volume_label1.show()
-        self.volume_slider1.show()
-        self.volume_label2.show()
-        self.volume_slider2.show()
+
+        # Create a new layout for the playback controls
+        playback_controls_layout = QHBoxLayout()
+
+        for i in range(self.num_tracks):
+            track_info_layout = QVBoxLayout()
+
+            # Get the selected audio track and device
+            audio_track_index = self.audio_dropdowns[i].currentIndex()
+            audio_device_index = self.audio_device_dropdowns[i].currentIndex()
+            audio_track_name = self.audio_dropdowns[i].currentText()
+            audio_device_name = self.audio_device_dropdowns[i].currentText()
+
+            # Get the language code for the flag
+            language_code = self.audio_tracks[audio_track_index][0]
+            icon_path = f"flags/{language_code.split('-')[1].lower()}.svg" if '-' in language_code else f"flags/{language_code.lower()}.svg"
+            icon = QIcon(icon_path) if os.path.exists(icon_path) else None
+
+            # Create a horizontal layout for the flag and track name
+            flag_track_layout = QHBoxLayout()
+            if icon:
+                flag_label = QLabel()
+                flag_label.setPixmap(icon.pixmap(24, 24))
+                flag_track_layout.addWidget(flag_label)
+            track_name_label = QLabel(audio_track_name)
+            flag_track_layout.addWidget(track_name_label)
+            flag_track_layout.addStretch()  
+
+            # Create a vertical layout for the volume control and device name
+            volume_device_layout = QVBoxLayout()
+            volume_layout = QHBoxLayout()
+            volume_label = QLabel(f"Volume Track {i + 1}:")
+            volume_slider = QSlider(Qt.Horizontal)
+            volume_slider.setMinimum(0)
+            volume_slider.setMaximum(100)
+            volume_slider.setValue(100)
+            volume_slider.valueChanged.connect(lambda value, index=i: self.update_volume(index, value))
+            volume_layout.addWidget(volume_label)
+            volume_layout.addWidget(volume_slider)
+            volume_device_layout.addLayout(volume_layout)
+            device_name_label = QLabel(audio_device_name)
+            volume_device_layout.addWidget(device_name_label)
+
+            # Add the flag_track_layout and volume_device_layout to the track_info_layout
+            track_info_layout.addLayout(flag_track_layout)
+            track_info_layout.addLayout(volume_device_layout)
+
+            # Add the track info layout to the playback controls layout
+            playback_controls_layout.addLayout(track_info_layout)
+
+            if i < self.num_tracks - 1:
+                playback_controls_layout.addWidget(self.create_vertical_separation_line())
+
+        # Insert the playback controls layout into the main layout
+        self.layout.insertLayout(3, playback_controls_layout)
+        self.adjustSize()
+
+        # Hide the audio track and device labels
+        for layout in self.audio_layouts:
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if item.widget() and isinstance(item.widget(), QLabel):
+                    item.widget().hide()
 
     def get_audio_tracks(self, video_file):
         """
@@ -341,44 +339,30 @@ class MultitracksVLC(QMainWindow):
         dsound.DirectSoundEnumerateA(LPDSENUMCALLBACK(audio_enum_callback), None)
         return [device for device in devices if device[0]]
 
-    def start_vlc_instances(self, video_file, audio_track1, audio_track2, device1_guid, device2_guid):
+    def start_vlc_instances(self, video_file, audio_tracks, device_guids):
         """
-        Start two VLC instances with specified audio tracks and devices.
+        Start multiple VLC instances with specified audio tracks and devices.
 
         Args:
             video_file (str): Path to the video file.
-            audio_track1 (int): Index of the first audio track.
-            audio_track2 (int): Index of the second audio track.
-            device1_guid (str): GUID of the first audio device.
-            device2_guid (str): GUID of the second audio device.
+            audio_tracks (list): List of indices of the audio tracks.
+            device_guids (list): List of GUIDs of the audio devices.
         """
         video_file = os.path.abspath(video_file)
-        vlc_cmd1 = [
-            self.vlc_path,
-            video_file,
-            f"--audio-track={audio_track1}",
-            f"--aout=directx",
-            f"--directx-audio-device={device1_guid}",
-            "--no-video-title-show",
-            "--rc-host=localhost:4212",
-            "--extraintf=rc",
-            "--intf=dummy",
-            "--fullscreen"
-        ]
-        vlc_cmd2 = [
-            self.vlc_path,
-            video_file,
-            f"--audio-track={audio_track2}",
-            f"--aout=directx",
-            f"--directx-audio-device={device2_guid}",
-            "--no-video-title-show",
-            "--rc-host=localhost:4213",
-            "--extraintf=rc",
-            "--intf=dummy",
-            "--novideo"
-        ]
-        subprocess.Popen(vlc_cmd1, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        subprocess.Popen(vlc_cmd2, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        for i, (audio_track, device_guid) in enumerate(zip(audio_tracks, device_guids)):
+            vlc_cmd = [
+                self.vlc_path,
+                video_file,
+                f"--audio-track={audio_track}",
+                f"--aout=directx",
+                f"--directx-audio-device={device_guid}",
+                "--no-video-title-show",
+                f"--rc-host=localhost:{4212 + i}",
+                "--extraintf=rc",
+                "--intf=dummy",
+                "--fullscreen" if i == 0 else "--novideo"
+            ]
+            subprocess.Popen(vlc_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         time.sleep(2)
 
     def send_command(self, host, port, command, is_quit=False):
@@ -458,25 +442,120 @@ class MultitracksVLC(QMainWindow):
         """
         Populate the audio track dropdowns with available audio tracks.
         """
-        self.audio_dropdown1.clear()
-        self.audio_dropdown2.clear()
-        for language_code, language_name in self.audio_tracks:
-            icon_path = f"flags/{language_code.split('-')[1].lower()}.svg" if '-' in language_code else f"flags/{language_code.lower()}.svg"
-            icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
-            self.audio_dropdown1.addItem(icon, language_name)
-            self.audio_dropdown2.addItem(icon, language_name)
-        self.audio_dropdown1.setCurrentIndex(0)
-        self.audio_dropdown2.setCurrentIndex(1 if len(self.audio_tracks) > 1 else 0)
+        for i, dropdown in enumerate(self.audio_dropdowns):
+            dropdown.clear()
+            for language_code, language_name in self.audio_tracks:
+                icon_path = f"flags/{language_code.split('-')[1].lower()}.svg" if '-' in language_code else f"flags/{language_code.lower()}.svg"
+                icon = QIcon(icon_path) if os.path.exists(icon_path) else QIcon()
+                dropdown.addItem(icon, language_name)
+            if i < len(self.audio_tracks):
+                dropdown.setCurrentIndex(i)
+
+
+    def create_audio_layouts(self):
+        """
+        Create the audio layouts for the specified number of tracks.
+        """
+        for i in range(self.num_tracks):
+            audio_layout = QVBoxLayout()
+            audio_track_label = QLabel(f"Select Audio Track {i + 1}:")
+            audio_layout.addWidget(audio_track_label)
+            audio_dropdown = QComboBox()
+            audio_layout.addWidget(audio_dropdown)
+
+            audio_device_label = QLabel(f"Select Audio Device {i + 1}:")
+            audio_layout.addWidget(audio_device_label)
+            audio_device_dropdown = QComboBox()
+            self.audio_devices = self.get_audio_devices()
+            audio_device_dropdown.addItems([dev_name for dev_id, dev_name in self.audio_devices])
+            audio_layout.addWidget(audio_device_dropdown)
+
+            volume_layout = QHBoxLayout()
+            volume_label = QLabel(f"Volume Track {i + 1}:")
+            volume_layout.addWidget(volume_label)
+            volume_slider = QSlider(Qt.Horizontal)
+            volume_slider.setMinimum(0)
+            volume_slider.setMaximum(100)
+            volume_slider.setValue(100)
+            volume_slider.valueChanged.connect(lambda value, index=i: self.update_volume(index, value))
+            volume_layout.addWidget(volume_slider)
+            volume_label.hide()
+            volume_slider.hide()
+
+            self.audio_layouts.append(audio_layout)
+            self.audio_dropdowns.append(audio_dropdown)
+            self.audio_device_dropdowns.append(audio_device_dropdown)
+            self.volume_sliders.append(volume_slider)
+            self.volume_labels.append(volume_label)
+
+        self.update_layout()
+
+    def update_audio_layouts(self):
+        """
+        Update the audio layouts when the number of tracks changes.
+        """
+        for layout in self.audio_layouts:
+            while layout.count():
+                item = layout.takeAt(0)
+                widget = item.widget()
+                if widget is not None:
+                    widget.deleteLater()
+                else:
+                    self.clear_layout(item.layout())
+
+        self.audio_layouts = []
+        self.audio_dropdowns = []
+        self.audio_device_dropdowns = []
+        self.volume_sliders = []
+        self.volume_labels = []
+
+        self.create_audio_layouts()
+
+        new_width = self.num_tracks * 400
+        self.setFixedWidth(new_width)
+
+    def update_layout(self):
+        """
+        Update the main layout to accommodate the new audio layouts.
+        """
+        audio_selection_layout = QHBoxLayout()
+        for i, audio_layout in enumerate(self.audio_layouts):
+            volume_layout = QHBoxLayout()
+            volume_layout.addWidget(self.volume_labels[i])
+            volume_layout.addWidget(self.volume_sliders[i])
+            audio_selection_layout.addLayout(volume_layout)
+            audio_selection_layout.addLayout(audio_layout)
+            if i < len(self.audio_layouts) - 1:
+                audio_selection_layout.addWidget(self.create_vertical_separation_line())
+
+        self.layout.insertLayout(3, audio_selection_layout)
+        self.adjustSize()
+
+    def clear_layout(self, layout):
+        """
+        Recursively clear the layout.
+
+        Args:
+            layout (QLayout): The layout to clear.
+        """
+        while layout.count():
+            item = layout.takeAt(0)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+            else:
+                self.clear_layout(item.layout())
 
 class SettingsDialog(QDialog):
-    def __init__(self, vlc_path, parent=None):
+    def __init__(self, vlc_path, num_tracks, parent=None):
         super().__init__(parent)
         self.vlc_path = vlc_path
+        self.num_tracks = num_tracks
         self.initUI()
 
     def initUI(self):
         self.setWindowTitle("Settings")
-        self.setGeometry(100, 100, 400, 200)
+        self.setGeometry(100, 100, 400, 250)
 
         layout = QVBoxLayout()
 
@@ -489,6 +568,14 @@ class SettingsDialog(QDialog):
         self.browse_btn = QPushButton("Browse")
         self.browse_btn.clicked.connect(self.browse_vlc)
         layout.addWidget(self.browse_btn)
+
+        self.num_tracks_label = QLabel("Number of Audio Tracks:")
+        layout.addWidget(self.num_tracks_label)
+
+        self.num_tracks_input = QSpinBox()
+        self.num_tracks_input.setMinimum(2)
+        self.num_tracks_input.setValue(self.num_tracks)
+        layout.addWidget(self.num_tracks_input)
 
         self.save_btn = QPushButton("Save")
         self.save_btn.clicked.connect(self.accept)
@@ -506,6 +593,9 @@ class SettingsDialog(QDialog):
 
     def get_vlc_path(self):
         return self.vlc_path_input.text()
+
+    def get_num_tracks(self):
+        return self.num_tracks_input.value()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

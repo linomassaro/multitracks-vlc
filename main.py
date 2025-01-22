@@ -5,9 +5,10 @@ import time
 import sys
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QLabel, QPushButton, QComboBox,
                              QVBoxLayout, QWidget, QFileDialog, QMessageBox, QSlider, QHBoxLayout,
-                             QAction, QToolBar, QDialog, QLineEdit, QGridLayout, QFrame, QSpinBox)
-from PyQt5.QtCore import Qt, QTimer, QSettings
-from PyQt5.QtGui import QIcon
+                             QAction, QToolBar, QDialog, QLineEdit, QGridLayout, QFrame, QSpinBox,
+                             QGraphicsOpacityEffect)
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+from PyQt5.QtGui import QIcon, QFont
 from pymediainfo import MediaInfo
 import ctypes
 from ctypes import POINTER, WINFUNCTYPE, c_bool, c_byte, c_char_p
@@ -24,7 +25,7 @@ class MultitracksVLC(QMainWindow):
         self.vlc_path = r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
         self.num_tracks = 2
         self.video_started = False
-        self.timer = QTimer(self)  
+        self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_playback_time)
         self.initUI()
 
@@ -44,9 +45,12 @@ class MultitracksVLC(QMainWindow):
 
         self.video_label = QLabel("No video selected")
         self.video_label.setAlignment(Qt.AlignCenter)
+        self.video_label.setStyleSheet("font-size: 16px; color: #333;")
         self.layout.addWidget(self.video_label)
 
-        self.select_video_btn = QPushButton("Select Video")
+        self.select_video_btn = QPushButton(" Select Video")
+        self.select_video_btn.setIcon(QIcon('icons/folder.svg'))
+        self.select_video_btn.setStyleSheet("padding: 10px; font-size: 14px;")
         self.select_video_btn.clicked.connect(self.select_video)
         self.layout.addWidget(self.select_video_btn)
 
@@ -62,11 +66,15 @@ class MultitracksVLC(QMainWindow):
 
         self.layout.addWidget(self.create_separation_line())
 
-        self.start_video_btn = QPushButton("Start Video")
+        self.start_video_btn = QPushButton(" Start Video")
+        self.start_video_btn.setIcon(QIcon('icons/play.svg'))
+        self.start_video_btn.setStyleSheet("padding: 10px; font-size: 14px;")
         self.start_video_btn.clicked.connect(self.start_video)
         self.layout.addWidget(self.start_video_btn)
 
-        self.pause_btn = QPushButton("Pause")
+        self.pause_btn = QPushButton(" Pause")
+        self.pause_btn.setIcon(QIcon('icons/pause.svg'))
+        self.pause_btn.setStyleSheet("padding: 10px; font-size: 14px;")
         self.pause_btn.clicked.connect(self.pause)
         self.layout.addWidget(self.pause_btn)
         self.pause_btn.hide()
@@ -79,13 +87,15 @@ class MultitracksVLC(QMainWindow):
         self.seek_bar.hide()
 
         self.time_label = QLabel("00:00:00")
+        self.time_label.setStyleSheet("font-size: 14px; color: #333;")
         self.layout.addWidget(self.time_label)
         self.time_label.hide()
 
         self.layout.addWidget(self.create_separation_line())
 
         self.quit_btn = QPushButton("Quit")
-        self.quit_btn.setStyleSheet("background-color: red; color: white;")
+        self.quit_btn.setIcon(QIcon('icons/quit.svg'))
+        self.quit_btn.setStyleSheet("background-color: red; color: white; padding: 10px; font-size: 14px;")
         self.quit_btn.clicked.connect(self.quit_app)
         self.layout.addWidget(self.quit_btn)
 
@@ -97,6 +107,9 @@ class MultitracksVLC(QMainWindow):
         self.toolbar.addAction(settings_action)
 
     def create_vertical_separation_line(self):
+        """
+        Create a vertical separation line.
+        """
         line = QFrame()
         line.setFrameShape(QFrame.VLine)
         line.setFrameShadow(QFrame.Sunken)
@@ -104,6 +117,9 @@ class MultitracksVLC(QMainWindow):
         return line
 
     def create_separation_line(self):
+        """
+        Create a horizontal separation line.
+        """
         line = QFrame()
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
@@ -167,22 +183,32 @@ class MultitracksVLC(QMainWindow):
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
 
     def update_playback_time(self):
-        """Update the seek bar and time label with the current playback time."""
+        """
+        Update the seek bar and time label with the current playback time.
+        """
         if not self.video_started:
             return
-        current_time = self.get_current_time("localhost", 4212)  # Query first instance
+        current_time = self.get_current_time("localhost", 4212)
         if current_time is not None:
-            # Block signals to prevent triggering seek command
             self.seek_bar.blockSignals(True)
             self.seek_bar.setValue(current_time)
             self.seek_bar.blockSignals(False)
             self.time_label.setText(self.format_time(current_time))
 
     def get_current_time(self, host, port):
-        """Get current playback time with socket timeout."""
+        """
+        Get the current playback time from VLC.
+
+        Args:
+            host (str): Host address.
+            port (int): Port number.
+
+        Returns:
+            int: Current playback time in seconds, or None if failed.
+        """
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-                s.settimeout(0.5)  # Prevent blocking the UI
+                s.settimeout(0.5)
                 s.connect((host, port))
                 s.sendall(b"get_time\n")
                 s.settimeout(0.5)
@@ -231,7 +257,7 @@ class MultitracksVLC(QMainWindow):
         Quit the application and stop VLC instances.
         """
         if self.video_started:
-            self.timer.stop() 
+            self.timer.stop()
             for port in range(4212, 4212 + self.num_tracks):
                 self.send_command("localhost", port, "quit", is_quit=True)
         QApplication.quit()
@@ -260,24 +286,20 @@ class MultitracksVLC(QMainWindow):
         self.seek_bar.show()
         self.time_label.show()
 
-        # Create a new layout for the playback controls
         playback_controls_layout = QHBoxLayout()
 
         for i in range(self.num_tracks):
             track_info_layout = QVBoxLayout()
 
-            # Get the selected audio track and device
             audio_track_index = self.audio_dropdowns[i].currentIndex()
             audio_device_index = self.audio_device_dropdowns[i].currentIndex()
             audio_track_name = self.audio_dropdowns[i].currentText()
             audio_device_name = self.audio_device_dropdowns[i].currentText()
 
-            # Get the language code for the flag
             language_code = self.audio_tracks[audio_track_index][0]
             icon_path = f"flags/{language_code.split('-')[1].lower()}.svg" if '-' in language_code else f"flags/{language_code.lower()}.svg"
             icon = QIcon(icon_path) if os.path.exists(icon_path) else None
 
-            # Create a horizontal layout for the flag and track name
             flag_track_layout = QHBoxLayout()
             if icon:
                 flag_label = QLabel()
@@ -285,9 +307,8 @@ class MultitracksVLC(QMainWindow):
                 flag_track_layout.addWidget(flag_label)
             track_name_label = QLabel(audio_track_name)
             flag_track_layout.addWidget(track_name_label)
-            flag_track_layout.addStretch()  
+            flag_track_layout.addStretch()
 
-            # Create a vertical layout for the volume control and device name
             volume_device_layout = QVBoxLayout()
             volume_layout = QHBoxLayout()
             volume_label = QLabel(f"Volume Track {i + 1}:")
@@ -302,21 +323,17 @@ class MultitracksVLC(QMainWindow):
             device_name_label = QLabel(audio_device_name)
             volume_device_layout.addWidget(device_name_label)
 
-            # Add the flag_track_layout and volume_device_layout to the track_info_layout
             track_info_layout.addLayout(flag_track_layout)
             track_info_layout.addLayout(volume_device_layout)
 
-            # Add the track info layout to the playback controls layout
             playback_controls_layout.addLayout(track_info_layout)
 
             if i < self.num_tracks - 1:
                 playback_controls_layout.addWidget(self.create_vertical_separation_line())
 
-        # Insert the playback controls layout into the main layout
         self.layout.insertLayout(3, playback_controls_layout)
         self.adjustSize()
 
-        # Hide the audio track and device labels
         for layout in self.audio_layouts:
             for i in range(layout.count()):
                 item = layout.itemAt(i)
@@ -443,13 +460,13 @@ class MultitracksVLC(QMainWindow):
 
     def format_time(self, seconds):
         """
-        Convert seconds to hh\:mm\:ss format.
+        Convert seconds to hh:mm:ss format.
 
         Args:
             seconds (int): Time in seconds.
 
         Returns:
-            str: Time in hh\:mm\:ss format.
+            str: Time in hh:mm:ss format.
         """
         hours = seconds // 3600
         minutes = (seconds % 3600) // 60
@@ -484,7 +501,6 @@ class MultitracksVLC(QMainWindow):
                 dropdown.addItem(icon, language_name)
             if i < len(self.audio_tracks):
                 dropdown.setCurrentIndex(i)
-
 
     def create_audio_layouts(self):
         """
@@ -582,12 +598,23 @@ class MultitracksVLC(QMainWindow):
 
 class SettingsDialog(QDialog):
     def __init__(self, vlc_path, num_tracks, parent=None):
+        """
+        Initialize the settings dialog.
+
+        Args:
+            vlc_path (str): Path to the VLC executable.
+            num_tracks (int): Number of audio tracks.
+            parent (QWidget): Parent widget.
+        """
         super().__init__(parent)
         self.vlc_path = vlc_path
         self.num_tracks = num_tracks
         self.initUI()
 
     def initUI(self):
+        """
+        Set up the user interface for the settings dialog.
+        """
         self.setWindowTitle("Settings")
         self.setGeometry(100, 100, 400, 250)
 
@@ -618,6 +645,9 @@ class SettingsDialog(QDialog):
         self.setLayout(layout)
 
     def browse_vlc(self):
+        """
+        Open a file dialog to browse for the VLC executable.
+        """
         options = QFileDialog.Options()
         vlc_path, _ = QFileDialog.getOpenFileName(self, "Select VLC Executable", "",
                                                   "Executable Files (*.exe);;All Files (*)",
@@ -626,9 +656,21 @@ class SettingsDialog(QDialog):
             self.vlc_path_input.setText(vlc_path)
 
     def get_vlc_path(self):
+        """
+        Get the VLC path from the input field.
+
+        Returns:
+            str: Path to the VLC executable.
+        """
         return self.vlc_path_input.text()
 
     def get_num_tracks(self):
+        """
+        Get the number of audio tracks from the input field.
+
+        Returns:
+            int: Number of audio tracks.
+        """
         return self.num_tracks_input.value()
 
 if __name__ == "__main__":

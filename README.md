@@ -4,7 +4,7 @@ Multitracks VLC is a Python application that allows you to play a video file wit
 
 ## Direct Execution
 
-This application can be executed directly by downloading and running the installer from the [releases page](https://github.com/linomassaro/multitracks-vlc/releases). This method is specifically for Windows users.
+This application can be executed directly (no requirements) by downloading and running the installer from the [releases page](https://github.com/linomassaro/multitracks-vlc/releases). This method is specifically for Windows users.
 
 ## Features
 

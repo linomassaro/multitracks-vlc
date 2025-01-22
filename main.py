@@ -23,6 +23,7 @@ class MultitracksVLC(QMainWindow):
         self.video_duration = 0
         self.vlc_path = r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
         self.num_tracks = 2
+        self.video_started = False
         self.initUI()
 
     def initUI(self):
@@ -158,6 +159,7 @@ class MultitracksVLC(QMainWindow):
             for port in range(4212, 4212 + self.num_tracks):
                 self.send_command("localhost", port, "play")
             self.show_playback_controls()
+            self.video_started = True
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
 
@@ -198,8 +200,9 @@ class MultitracksVLC(QMainWindow):
         """
         Quit the application and stop VLC instances.
         """
-        for port in range(4212, 4212 + self.num_tracks):
-            self.send_command("localhost", port, "quit", is_quit=True)
+        if self.video_started:
+            for port in range(4212, 4212 + self.num_tracks):
+                self.send_command("localhost", port, "quit", is_quit=True)
         QApplication.quit()
 
     def closeEvent(self, event):

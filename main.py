@@ -24,6 +24,8 @@ class MultitracksVLC(QMainWindow):
         self.vlc_path = r"C:\Program Files (x86)\VideoLAN\VLC\vlc.exe"
         self.num_tracks = 2
         self.video_started = False
+        self.timer = QTimer(self)  
+        self.timer.timeout.connect(self.update_playback_time)
         self.initUI()
 
     def initUI(self):
@@ -160,8 +162,36 @@ class MultitracksVLC(QMainWindow):
                 self.send_command("localhost", port, "play")
             self.show_playback_controls()
             self.video_started = True
+            self.timer.start(1000)
         except Exception as e:
             QMessageBox.critical(self, "Error", f"An error occurred: {e}")
+
+    def update_playback_time(self):
+        """Update the seek bar and time label with the current playback time."""
+        if not self.video_started:
+            return
+        current_time = self.get_current_time("localhost", 4212)  # Query first instance
+        if current_time is not None:
+            # Block signals to prevent triggering seek command
+            self.seek_bar.blockSignals(True)
+            self.seek_bar.setValue(current_time)
+            self.seek_bar.blockSignals(False)
+            self.time_label.setText(self.format_time(current_time))
+
+    def get_current_time(self, host, port):
+        """Get current playback time with socket timeout."""
+        try:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                s.settimeout(0.5)  # Prevent blocking the UI
+                s.connect((host, port))
+                s.sendall(b"get_time\n")
+                s.settimeout(0.5)
+                response = s.recv(1024).decode().strip()
+                if response.isdigit():
+                    return int(response)
+        except Exception as e:
+            print(f"Error getting time: {e}")
+        return None
 
     def pause(self):
         """
@@ -201,6 +231,7 @@ class MultitracksVLC(QMainWindow):
         Quit the application and stop VLC instances.
         """
         if self.video_started:
+            self.timer.stop() 
             for port in range(4212, 4212 + self.num_tracks):
                 self.send_command("localhost", port, "quit", is_quit=True)
         QApplication.quit()

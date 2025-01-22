@@ -31,7 +31,7 @@ This application can be executed directly (no requirements) by downloading and r
     pip install PyQt5 pymediainfo
     ```
 
-3. **Install VLC Media Player**: Download and install VLC Media Player from [videolan.org](https://www.videolan.org/). Ensure that the `vlc.exe` path is the correct one (main.py#310 & main.py#322).
+3. **Install VLC Media Player**: Download and install VLC Media Player from [videolan.org](https://www.videolan.org/). Ensure that the `vlc.exe` path is the correct one (main.py#25).
 
 ## Usage
 
